@@ -36,11 +36,6 @@ def rand_word() -> str:
     return "".join(random.choice(string.ascii_lowercase) for _ in range(L))
 
 def make_parquet(pq_file: Path, txt_file: Path):
-    """
-    Build a 100 k-row Parquet table from `txt_file` so that
-      • 70 % lines come from the 1 000 most-common words  (hot set)
-      • 30 % lines come from the remaining long-tail words
-    """
     assert txt_file.exists(), f"{txt_file} not found"
 
     _LOG.info("Generating Parquet from %s …", txt_file)
@@ -122,7 +117,7 @@ def validate():
     max_err, avg_err = max(errs), mean(errs)
     assert max_err < 0.03, f"ECDF max error {max_err:.4f} > 0.03"
 
-    print("\n✓ All checks passed.")
+    print("All checks passed.")
     print(f"Dictionary size : {len(kv)}")
     print(f"ECDF max error  : {max_err:.4f}")
     print(f"ECDF mean error : {avg_err:.4f}")
