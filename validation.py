@@ -17,6 +17,7 @@ from mop.worker  import MOPWorker
 
 from mop.worker import MOPWorker
 import inspect, sys
+import os
 print(">>> Worker implementation from:", inspect.getsourcefile(MOPWorker), file=sys.stderr)
 
 logging.basicConfig(
@@ -36,6 +37,11 @@ def rand_word() -> str:
     return "".join(random.choice(string.ascii_lowercase) for _ in range(L))
 
 def make_parquet(pq_file: Path, txt_file: Path):
+    """
+    Build a 100 k-row Parquet table from `txt_file` so that
+      • 70 % lines come from the 1 000 most-common words  (hot set)
+      • 30 % lines come from the remaining long-tail words
+    """
     assert txt_file.exists(), f"{txt_file} not found"
 
     _LOG.info("Generating Parquet from %s …", txt_file)
@@ -117,7 +123,33 @@ def validate():
     max_err, avg_err = max(errs), mean(errs)
     assert max_err < 0.03, f"ECDF max error {max_err:.4f} > 0.03"
 
-    print("All checks passed.")
+    raw_txt = work_dir / "words.txt"
+    raw_size = os.path.getsize(raw_txt)
+
+    # Parquet 字典 + 最小整型列（非 bit-packing，仅压缩 4× 左右）
+    par_file = work_dir / "worker0_mop.parquet"
+    if par_file.exists():
+        par_size = os.path.getsize(par_file)
+        print(f"\nRaw txt size          : {raw_size/1024:.1f} KiB")
+        print(f"Parquet uint encoding : {par_size/1024:.1f} KiB  "
+            f"({par_size/raw_size:.2%} of raw)")
+    else:
+        print("No Parquet file found.")
+
+    # Bit-packed 二进制位流列
+    bin_file = work_dir / "worker0_bp.bin"
+    bw_file = work_dir / "worker0_bw.txt"
+    if bin_file.exists() and bw_file.exists():
+        bin_size = os.path.getsize(bin_file)
+        with open(bw_file) as f:
+            bit_width = int(f.read().strip())
+
+        print(f"Bit-packed .bin size  : {bin_size/1024:.1f} KiB  "
+            f"({bin_size/raw_size:.2%} of raw)  [bit width = {bit_width}]")
+    else:
+        print("No bit-packed .bin found.")
+
+    print("\n✓ All checks passed.")
     print(f"Dictionary size : {len(kv)}")
     print(f"ECDF max error  : {max_err:.4f}")
     print(f"ECDF mean error : {avg_err:.4f}")

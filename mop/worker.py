@@ -5,6 +5,12 @@ from time import sleep
 
 import numpy as np, zmq
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import numpy as np
+
+from .bitpacking import pack as bitpack
+
 from .config    import DictionaryConfig
 from .algorithm import EcdfSampler
 from .          import net
@@ -31,16 +37,38 @@ class MOPWorker(threading.Thread):
         self._handshake()
         self._sampling_phase()
         tail_batch = self._main_loop()
+        self._flush_batch(tail_batch)          # ← 字典已经最终同步完
 
-        self._flush_batch(tail_batch) 
+            # -------- Bit-pack 编码列，并写出到 .bin + .txt --------
+        print(">>> Writing bit-packed output...", flush=True)
+
+        # 1. 重新按顺序遍历全部单词 → 映射成 id
+        encoded_ids = np.fromiter(
+            (self.kv_map[w] for w in self._all_words()),
+            dtype=np.uint32
+        )
+
+        # 2. 使用自定义 pack() 函数做 bit packing
+        bits, bw = bitpack(encoded_ids)   # bits: bytes, bw: bit width (e.g. 8)
+
+        # 3. 写出 bitstream → binary 文件
+        out_dir = self.cfg.worker_dir
+        (out_dir / f"worker{self.wid}_bp.bin").write_bytes(bits)
+
+        # 4. 写出元数据：使用了多少 bits
+        (out_dir / f"worker{self.wid}_bw.txt").write_text(str(bw))
+
+        print(f">>> Bit-packed column written: {len(bits)} bytes, bit-width: {bw}", flush=True)
 
         print(">>> Worker END about to send", flush=True)
         self.push.linger = 1000
         self.push.send_json({"type": "END", "wid": self.wid})
         sleep(0.05)
         print(">>> Worker END flushed", flush=True)
+        self.push.close()
+        self.sub.close()
 
-        self.push.close(); self.sub.close()
+
 
     def _handshake(self):
         self.push.send_json({"type": "HANDSHAKE", "wid": self.wid})
@@ -119,3 +147,11 @@ class MOPWorker(threading.Thread):
 
     def _line_count(self) -> int:
         return sum(1 for _ in open(self._input_path))
+    
+    def _all_words(self):
+        """Helper: iterate over *all* words in original order."""
+        with open(self._input_path) as fp:
+            for line in fp:
+                w = line.strip()
+                if w:
+                    yield w

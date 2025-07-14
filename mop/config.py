@@ -25,6 +25,8 @@ class DictionaryConfig:
     mop_levels: int = 4
     pitch: int = 20
 
+    parquet_page: int = 128 * 1024
+
     timeout_ms: int = 5_000
 
     def __post_init__(self):
