@@ -126,7 +126,6 @@ def validate():
     raw_txt = work_dir / "words.txt"
     raw_size = os.path.getsize(raw_txt)
 
-    # Parquet 字典 + 最小整型列（非 bit-packing，仅压缩 4× 左右）
     par_file = work_dir / "worker0_mop.parquet"
     if par_file.exists():
         par_size = os.path.getsize(par_file)
@@ -136,7 +135,6 @@ def validate():
     else:
         print("No Parquet file found.")
 
-    # Bit-packed 二进制位流列
     bin_file = work_dir / "worker0_bp.bin"
     bw_file = work_dir / "worker0_bw.txt"
     if bin_file.exists() and bw_file.exists():
